@@ -22,7 +22,7 @@ eesim<-function(ngen=100,nburn=100,ndeme=30,dprob=0.01,dsd=0.1,
 	Nt = ngen+nburn ## total number of iterations
 	for(i in 1:Nt){
 		## one generation of evolution
-		onegen(nw=network,ndeme=ndeme,dprob=dprob,dsd=dsd) 		
+		network<-ongen(nw=network,ndeme=ndeme,dprob=dprob,dsd=dsd) 		
 		if(i<=nburn){
 			if((i %% 20) == 0){cat("Burnin gen ",i,"\n")}
 		} else {
@@ -50,7 +50,7 @@ init<-function(ndeme=30,acfunc=1,mnN=25){
 	maxN<-rpois(n=ndeme,lambda=mnN)
 
 	## set initial deme N
-	N<-runif(ndeme,min=0,max=maxN)
+	N<-round(runif(ndeme,min=0,max=maxN),0)
 
 	## set inital morph frequencies
 	q<-rbeta(n=ndeme,shape1=15,shape2=85) ## melanic, expectation 15%
@@ -86,29 +86,51 @@ samhosts<-function(x=NA,y=NA,ac=1){
 ## dsd = sd of normal kernel for dispersal
 ongen<-function(nw=NA,ndeme=NA,dprob=NA,dsd=NA){
 	
-	## create genotypes
+	## create genotypes, this sampling from allele frequencies
+	## is where drift occurs
 	G<-vector("list",ndeme)
 	for(k in 1:ndeme){
-		G[[k]]<-rmultinom(n=N[k],size=2,probs=c(q,p,(1-p-q)))
+		ppp<-c(nw$q[k],nw$p[k],(1-nw$p[k]-nw$q[k]))
+		ppp[ppp<0]<-0 ## avoids flot imprecision
+		G[[k]]<-rmultinom(n=nw$N[k],size=2,prob=ppp)
 	}
 
 	## dispersal
 	for(k in 1:ndeme){ ## no double dispersal
 		## sample dispersers, 1 = yes
-		dd<-which(sample(0:1,N[k],replace=TRUE,prob=c(1-dprob,dprob))==1)
+		dd<-which(sample(0:1,nw$N[k],replace=TRUE,prob=c(1-dprob,dprob))==1)
 		if(length(dd)>=1){ ## at least one disperser
 			for(j in 1:length(dd)){ ## move the dispersers
 				## need to precompute dispersal probs!!! ##
-				dest<-sample(1:ndeme,1,prob=dkp[k,-k]) ## matrix of disperal probs
+				dest<-sample(1:ndeme,1) ## equal dispersal, temp
+				#dest<-sample(1:ndeme,1,prob=dkp[k,-k]) ## matrix of disperal probs
 				G[[dest]]<-as.matrix(cbind(G[[dest]],G[[k]][,j]))
+				nw$N[dest]<-nw$N[dest]+1
 			}
 			G[[k]]<-G[[k]][,-dd] ## remove from source
+			nw$N[k]<-nw$N[[k]]-length(dd)
 		}
 	}
 
 	## compute fitness
 	wbar = 1 ## baseline mean fitness, to be modified
-
+	w<-G ## relative fitness
+	for(k in 1:ndeme){
+		w[[k]]<-rep(wbar,nw$N[k]) ## start with 1
+		## other multiplies
+		## host and nfds
+		## arthropod density
+		## overdominance
+		## fluctuating selection
+	}
+	
 	## apply selection and update allele frequencies and N
-
-
+	for(k in 1:ndeme){
+		## take weighted average calculation
+		asums<-G[[k]] %*% w[[k]]
+		fr<-asums/sum(asums)
+		nw$q[k]<-fr[1,1]
+		nw$p[k]<-fr[2,1]
+	}
+	return(nw)
+}
