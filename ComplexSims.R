@@ -92,6 +92,7 @@ ongen<-function(nw=NA,ndeme=NA,dprob=NA,dsd=NA){
 	for(k in 1:ndeme){
 		ppp<-c(nw$q[k],nw$p[k],(1-nw$p[k]-nw$q[k]))
 		ppp[ppp<0]<-0 ## avoids flot imprecision
+		## order is melanic, stripe, green
 		G[[k]]<-rmultinom(n=nw$N[k],size=2,prob=ppp)
 	}
 
@@ -112,16 +113,36 @@ ongen<-function(nw=NA,ndeme=NA,dprob=NA,dsd=NA){
 		}
 	}
 
+	## generate phenotypes assumes dominance: s > g > m
+	P<-vector("list",ndeme)
+	for(k in 1:ndeme){
+		P[[k]]<-rep(NA,nw$N[k])
+		## melanics, assign value 1
+		P[[k]][G[[k]][1,]==2]<-1
+		## stripes assign value 2
+		P[[k]][G[[k]][2,]>=1]<-2
+		## green assign value 3
+		P[[k]][(G[[k]][3,]==2) | ((G[[k]][1,]+G[[k]][3,])==2)]<-3
+	}
+
+
 	## compute fitness
 	wbar = 1 ## baseline mean fitness, to be modified
 	w<-G ## relative fitness
+
 	for(k in 1:ndeme){
 		w[[k]]<-rep(wbar,nw$N[k]) ## start with 1
+		## fluctuating selection
+		if(sdmg > 0){ ## this means fluctuating
+			mgk<-rnorm(1,mumg,sdmg) ## mgk is log( w(m/g)); 0 = w(m) = w(g)
+		} else{ ## not fluctuating
+			mgk<-mumg
+		}
+		
 		## other multiplies
 		## host and nfds
 		## arthropod density
 		## overdominance
-		## fluctuating selection
 	}
 	
 	## apply selection and update allele frequencies and N
