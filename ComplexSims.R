@@ -12,24 +12,44 @@
 ## dsd = sd of normal kernel for dispersal
 ## acfunc = method for autocorrelation in host, 1 = random with equal freqs
 ## mnN = mean of Poisson carrying capacity per deme
+## modHOST = boolean, include host and possible NFDS
+## modOD = boolean, include overdominance
+## alpha = base host effect on log scale, log(ws/wg) = alpha[host] + sfreq * beta[host]
+## beta = NFDS host effect on log scale, log(ws/wg) = alpha[host] + sfreq * beta[host]
+## mumg = mean log(wm/(wg | ws))
+## sdmg = sd of log(wm/(wg | ws)) about mean, set to non-zero for fluctuating selection on color
+## od = relative fitness (not log scale) of melanic hets
+## note that all relative fitness values are multiplier
 eesim<-function(ngen=100,nburn=100,ndeme=30,dprob=0.01,dsd=0.1,
-		acfunc=1,mnN=25){
+		acfunc=1,mnN=25,modHOST=TRUE,modOD=FALSE,
+		alpha=c(0,0),beta=c(0,0),mumg=0,sdmg=0,od=1){
+
+	## collect model parameters
+	smod<-list(modHOST=modHOST,modOD=modOD,alpha=alpha,beta=beta,
+		   mumg=mumg,sdmg=sdmg,od=od)
 
 	## initialize the network
-	network<-init(ndeme,afunc,mnN)
+	network<-init(ndeme,acfunc,mnN)
 
 	## loop
 	Nt = ngen+nburn ## total number of iterations
+	
+	## output
+	## columns are gen, deme, N, q, p
+	out<-matrix(NA,nrow=ngen*ndeme,ncol=5)
+
 	for(i in 1:Nt){
 		## one generation of evolution
-		network<-ongen(nw=network,ndeme=ndeme,dprob=dprob,dsd=dsd) 		
+		network<-ongen(nw=network,ndeme=ndeme,dprob=dprob,dsd=dsd,mm=smod) 		
 		if(i<=nburn){
 			if((i %% 20) == 0){cat("Burnin gen ",i,"\n")}
 		} else {
 			if(((i-nburn) %% 20) == 0){cat("Post-burnin gen ",i-nburn,"\n")}
-			## need to decide what to save or print
+			oneres<-as.matrix(cbind(rep(i,ndeme),1:ndeme,network$N,network$q,network$p))
+			out[(((i-nburn-1) * ndeme) + 1):(((i-nburn-1) * ndeme) + ndeme),]<-oneres
 		}
 	}
+	return(out)
 }
 
 ## initialization function
@@ -68,7 +88,7 @@ init<-function(ndeme=30,acfunc=1,mnN=25){
 	return(nw)
 }
 
-## assign hosts
+## assign hosts, A = 1, C = 2
 samhosts<-function(x=NA,y=NA,ac=1){
 	hosts<-NA
 	if(ac==1){ ## random and equal
@@ -84,16 +104,23 @@ samhosts<-function(x=NA,y=NA,ac=1){
 ## ndeme = number of demes
 ## dprob = probability of dispersing
 ## dsd = sd of normal kernel for dispersal
-ongen<-function(nw=NA,ndeme=NA,dprob=NA,dsd=NA){
+## mm = collection of model parameters
+ongen<-function(nw=NA,ndeme=NA,dprob=NA,dsd=NA,mm=NA){
 	
 	## create genotypes, this sampling from allele frequencies
 	## is where drift occurs
 	G<-vector("list",ndeme)
 	for(k in 1:ndeme){
-		ppp<-c(nw$q[k],nw$p[k],(1-nw$p[k]-nw$q[k]))
-		ppp[ppp<0]<-0 ## avoids flot imprecision
-		## order is melanic, stripe, green
-		G[[k]]<-rmultinom(n=nw$N[k],size=2,prob=ppp)
+		if(nw$N[k] >= 1){
+			ppp<-c(nw$q[k],nw$p[k],(1-nw$p[k]-nw$q[k]))
+			ppp[ppp<0]<-0 ## avoids flot imprecision
+			ppp<-ppp/sum(ppp) 
+			## order is melanic, stripe, green
+			G[[k]]<-as.matrix(rmultinom(n=nw$N[k],size=2,prob=ppp))
+		}
+		else{ ## extripated
+			G[[k]]<-NULL
+		}
 	}
 
 	## dispersal
@@ -113,45 +140,67 @@ ongen<-function(nw=NA,ndeme=NA,dprob=NA,dsd=NA){
 		}
 	}
 
-	## generate phenotypes assumes dominance: s > g > m
+	## generate phenotypes assumes dominance: g > s > m, from Aaron's work
 	P<-vector("list",ndeme)
 	for(k in 1:ndeme){
-		P[[k]]<-rep(NA,nw$N[k])
-		## melanics, assign value 1
-		P[[k]][G[[k]][1,]==2]<-1
-		## stripes assign value 2
-		P[[k]][G[[k]][2,]>=1]<-2
-		## green assign value 3
-		P[[k]][(G[[k]][3,]==2) | ((G[[k]][1,]+G[[k]][3,])==2)]<-3
+		if(nw$N[k] >=1){
+			G[[k]]<-as.matrix(G[[k]])
+			P[[k]]<-rep(NA,nw$N[k])
+			## melanics, assign value 1
+			P[[k]][G[[k]][1,]==2]<-1
+			## stripes assign value 2
+			P[[k]][(G[[k]][2,]==2) | ((G[[k]][1,]+G[[k]][2,])==2)]<-2
+			## green assign value 3
+			P[[k]][G[[k]][3,]>=1]<-3
+		}
 	}
 
 
 	## compute fitness
-	wbar = 1 ## baseline mean fitness, to be modified
+	wbar = 1 ## initial baseline mean fitness, to be modified
 	w<-G ## relative fitness
 
 	for(k in 1:ndeme){
 		w[[k]]<-rep(wbar,nw$N[k]) ## start with 1
 		## fluctuating selection
-		if(sdmg > 0){ ## this means fluctuating
-			mgk<-rnorm(1,mumg,sdmg) ## mgk is log( w(m/g)); 0 = w(m) = w(g)
+		if(mm$sdmg > 0){ ## this means fluctuating
+			mgk<-rnorm(1,mm$mumg,mm$sdmg) ## mgk is log(wm/wg); 0 = wm = wg (wg = ws)
 		} else{ ## not fluctuating
-			mgk<-mumg
+			mgk<-mm$mumg
 		}
+		## melanics
+		w[[k]][P[[k]]==3]<- w[[k]][P[[k]]==3] * exp(mgk) ## multiply wbar * wm/wg, exp to reverse log
+		## don't need to multiply green or stripe
 		
-		## other multiplies
 		## host and nfds
-		## arthropod density
+		if(mm$modHOST==TRUE){
+			sfreq<-sum(P[[k]]==2)/sum(P[[k]]==2 | P[[k]]==3) ## stripe freq relative to green + stripe	
+			## index 1 = A, index 2 = C
+			sgk<-mm$alpha[nw$host[k]] + sfreq * mm$beta[nw$host[k]] ## log(ws/wg) = alpha_host + sfreq * beta_host
+			w[[k]][P[[k]]==2]<-w[[k]][P[[k]]==2]*log(sgk) ## multiply base ws * ws/wg
+		}
+
 		## overdominance
+		if(mm$modOD==TRUE){ 
+			## melanic hets
+			w[[k]][G[[k]][1,]==1]<-w[[k]][G[[k]][1,]==1] * mm$od ## relative fitness of overdominant
+		}
+
+		## arthropod density
 	}
 	
 	## apply selection and update allele frequencies and N
 	for(k in 1:ndeme){
 		## take weighted average calculation
-		asums<-G[[k]] %*% w[[k]]
-		fr<-asums/sum(asums)
-		nw$q[k]<-fr[1,1]
-		nw$p[k]<-fr[2,1]
+		if(nw$N[k] >= 1){ ## population size is non-zero
+			asums<-G[[k]] %*% w[[k]]
+			fr<-asums/sum(asums)
+			nw$q[k]<-fr[1,1]
+			nw$p[k]<-fr[2,1]
+		} else{
+			nw$q[k]<-NA
+			nw$p[k]<-NA
+		}
 	}
 	return(nw)
 }
