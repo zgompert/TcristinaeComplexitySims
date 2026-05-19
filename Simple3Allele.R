@@ -3,7 +3,8 @@
 ## w = relative fitness (if nfds != this if relative fitness at p = 0.5)
 ## nfds = effect of frequency on relative fitness
 ## N = number of gens to simulate
-sim3a<-function(fs=1/3,fg=1/3,fm=1/3,ws=1,wg=1,wm=1,nfdss=0,nfdsg=0,nfdsm=0,N=500){
+## odm = fitness benefit for melanic hets
+sim3a<-function(fs=1/3,fg=1/3,fm=1/3,ws=1,wg=1,wm=1,nfdss=0,nfdsg=0,nfdsm=0,N=500,odm=0){
     P<-matrix(NA,nrow=N,ncol=3) ## s, g, m freqs
     P[1,]<-c(fs,fg,fm)
     
@@ -26,9 +27,9 @@ sim3a<-function(fs=1/3,fg=1/3,fm=1/3,ws=1,wg=1,wm=1,nfdss=0,nfdsg=0,nfdsm=0,N=50
         w[w<0]<-0
         w<-w/(w[1]*M[j-1,1] + w[2]*M[j-1,2] + w[3]*M[j-1,3])
         W[j-1,]<-w                
-        fsp<-fs^2*w[1] + fs*fg*w[1] + fs*fm*w[1]
-        fgp<-fs*fg*w[1] + fg^2*w[2] + fg*fm*w[2]
-        fmp<-fs*fm*w[1] + fg*fm*w[2] + fm^2*w[3]
+        fsp<-fs^2*w[1] + fs*fg*w[1] + fs*fm*(w[1] + odm)
+        fgp<-fs*fg*w[1] + fg^2*w[2] + fg*fm*(w[2] + odm)
+        fmp<-fs*fm*(w[1] + odm) + fg*fm*(w[2] + odm) + fm^2*w[3]
         sump<-fsp+fgp+fmp
         P[j,1]<-fsp/sump
         P[j,2]<-fgp/sump
@@ -128,5 +129,47 @@ plotsim(oo,x=3,tit="NFDS G+S+M (-1.1)",w=c(1,.9,.95))
 
 oo<-sim3a(fs=1/3,fg=1/3,fm=1/3,ws=1,wg=0.7,wm=.95,nfdss=-1.1,nfdsg=-1.1,nfdsm=-1.1)
 plotsim(oo,x=3,tit="NFDS G+S+M (-1.1)",w=c(1,.7,.95))
+
+dev.off()
+
+pdf("Sim3A_morphs_od.pdf",width=9,height=12)
+par(mfrow=c(4,3))
+par(mar=c(4.5,4.5,2.5,1))
+ 
+oo<-sim3a(ws=1,wg=0.9,wm=.95,nfdss=0,nfdsg=0,nfdsm=0,odm=0.05)
+plotsim(oo,x=3,tit="OD only (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(ws=1,wg=0.9,wm=.95,nfdss=-1.5,nfdsg=-1.5,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.5) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=4/6,fg=1/6,fm=1/6,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=4/6,fg=1/6,fm=1/6,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,N=25000,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=2/3,fg=1/3,fm=0,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=1/2,fg=1/2,fm=0,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=1/4,fg=3/4,fm=0,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=1/2,fg=0,fm=1/2,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=1/2,fg=0,fm=1/2,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,nfdsm=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S+M (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=1/3,fg=1/3,fm=1/3,ws=1,wg=0.9,wm=.95,nfdss=-1.1,nfdsg=-1.1,nfdsm=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S+M (-1.1) + OD (.05)",w=c(1,.9,.95))
+
+oo<-sim3a(fs=1/3,fg=1/3,fm=1/3,ws=1,wg=0.7,wm=.95,nfdss=-1.1,nfdsg=-1.1,nfdsm=-1.1,odm=0.05)
+plotsim(oo,x=3,tit="NFDS G+S+M (-1.1) + OD (.05)",w=c(1,.7,.95))
 
 dev.off()
